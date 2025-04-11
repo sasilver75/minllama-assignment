@@ -1,5 +1,7 @@
 # Min-Llama Assignment
-This is an assignment for NLP 244 Advanced Machine Learning for Natural Language Processing course at UCSC, forked from CMU's [minllama-assignment](https://github.com/neubig/minllama-assignment) for [CS11-711 Advanced NLP](http://phontron.com/class/anlp2024/).
+This is an assignment for NLP 244 Advanced Machine Learning for Natural Language Processing course in the UC Santa Cruz [NLP MS Program](https://nlp.ucsc.edu/).
+
+Forked from CMU's [minllama-assignment](https://github.com/neubig/minllama-assignment) for [CS11-711 Advanced NLP](http://phontron.com/class/anlp2024/).
 
 Originally created by Vijay Viswanathan (based on the previous [minbert-assignment](https://github.com/neubig/minbert-assignment))
 
