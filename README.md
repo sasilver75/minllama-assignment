@@ -67,21 +67,20 @@ Test Accuracy: -
 
 Mean reference accuracies over 10 random seeds with their standard deviation shown in brackets.
 
-### Submission
+### Submission Instructions
 
 **Code:**
-You will submit a full code package, with output files, on **Canvas**. This package will be checked by the TAs in the 1-2 weeks 
-   after the assignment for its correctness and executability.
+You will submit a full code package, with output files, on **Canvas**.
 
-**Report (optional):** Your zip file can include a pdf file, named ANDREWID-report.pdf, if (1) you've implemented something else on top of the requirements and further improved accuracy for possible extra points (see "Grading" below), and/or (2) if your best results are with some hyperparameters other than the default, and you want to specify how we should run your code. If you're doing (1), we expect your report should be 1-2 pages, but no more than 3 pages. If you're doing (2), the report can be very brief.
+**Report (optional):** Your zip file can include a pdf file, named CRUZID-report.pdf, if (1) you've implemented something else on top of the requirements and further improved accuracy for possible extra points (see "Grading" below), and/or (2) if your best results are with some hyperparameters other than the default, and you want to specify how we should run your code. If you're doing (1), we expect your report should be 1-2 pages, but no more than 3 pages. If you're doing (2), the report can be very brief.
 
 #### Canvas Submission
 
 For submission via [Canvas](https://canvas.cmu.edu/),
 the submission file should be a zip file with the following structure (assuming the
-lowercase Andrew ID is ``ANDREWID``):
+lowercase CruzID is ``CRUZID``):
 ```
-ANDREWID/
+CRUZID/
 ├── run_llama.py
 ├── base_llama.py
 ├── llama.py
@@ -118,9 +117,9 @@ this check will be graded down*.
 
 Usage:
 1. To create and check a zip file with your outputs, run
-   `python3 prepare_submit.py path/to/your/output/dir ANDREWID`
+   `python3 prepare_submit.py path/to/your/output/dir CRUZID`
 2. To check your zip file, run
-   `python3 prepare_submit.py path/to/your/submit/zip/file.zip ANDREWID`
+   `python3 prepare_submit.py path/to/your/submit/zip/file.zip CRUZID`
 
 Please double check this before you submit to Canvas; most recently we had about 10/100
 students lose a 1/3 letter grade because of an improper submission format.
