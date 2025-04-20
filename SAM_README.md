@@ -8,6 +8,26 @@
 2. Run the setup script: `./setup.sh`
 
 
+## File Structure
+Some of the general files are:
+- `config.py`: Defines a LlamaConfig class holding all hyperparameters.
+- `base_llama.py`: Provides a lightweight "pretrained model" base class and wiring for saving and loading configs.
+- `utils.py`: Miscellaneous helpers
+
+The four files that we really need to worry about are:
+- `rope.py`: Implements Rotary Positional Embeddings
+- `llama.py`: The heart of the assignment. A from-scratch PyTorch implmention of MH, GQA transformer blocks and the full LLama 2 mode.
+    - RMSNorm
+    - Attention
+    - FeedForward
+    - LlamaLayer (Layer Norm > Attention > Residual > Layer Norm > FFN > Residual)
+    - Llama (token embedding, stack of LlamaLayers, final norm + output head, weight tying, and a generate() function stub)
+    - load_pretrained() to load a checkpoint into your model.
+    - Bits where we have to implement are usually marked with `raise Implemented`
+- `classifier.py`: Two PyTorch Modules that wrap a frozen or trainable Llama backbone for classification: LlamaZeroShotClassifier and LlamaEmbedingClassifier.
+- `optimizer`: A skeleton for our own AdamW optimizer, mimicking PyTorch's but implementing it from scratch.
+
+
 ## Running the Code:
 
 ...
