@@ -298,12 +298,12 @@ class LlamaLayer(nn.Module):
         # Prenormalization via RMSNorm
         # Attention
         # Add to Residual Stream
-        h += self.attention(self.attention_norm(x))
+        h = h + self.attention(self.attention_norm(x))
 
         # Prenorm via RMSNorm
         # FFNN
         # Add to Residual Stream
-        h += self.feed_forward(self.ffn_norm(h))
+        h = h + self.feed_forward(self.ffn_norm(h))
 
         # Return
         return h
@@ -411,8 +411,8 @@ class Llama(LlamaPreTrainedModel):
                 This just means that we have to... argmax over the logits (to get the vocab index with the highest logit)
                 """
                 # Note that we don't HAVE to softmax here, because argmax(softmax(vector)) and argmax(vector) will be the same thing, since softmax is monotonic.
-                idx_next = torch.argmax(logits, dim=1) # (B,V) -> (B,) vector of the max vocab index for each sequence in our batch!
-                idx_next = idx_next.unsqueeze() # We need a 2-dimensional (B,1) to append it to our idx, later.
+                idx_next = torch.argmax(logits, dim=1) # (B,V) -> (B,) vector
+                idx_next = idx_next.unsqueeze(1) # Add dim=1 to make it (B,1)
             else:
                 '''
                 Perform temperature sampling:

@@ -80,7 +80,7 @@ def main(path: str, aid: str):
                     zz.write(ff, os.path.join(".", aid, rpath))
                     if rpath in required_files:
                         required_files.remove(rpath)
-        assert len(required_files) == 0, breakpoint()
+        assert len(required_files) == 0, breakpoint() # I'm hitting this, Sonnet -- Why?
         # --
         print(f"Submission zip file created from DIR={path} for {aid}: {aid}.zip")
         check_file(f'{aid}.zip', aid)
