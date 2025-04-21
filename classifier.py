@@ -8,6 +8,13 @@ from llama import load_pretrained
 from tokenizer import Tokenizer
 
 class LlamaZeroShotClassifier(torch.nn.Module):
+	"""
+	Init: Loads a frozen Llama model and encodes each human-readable label into a sequence of token ids
+	Forward: Given a batch (eg bs=1) of sequences of token ids...
+		There are N possible labels, e.g. "Cool Guy", "Total Loser", each of which might be multiple tokens.
+		We compute the probability of any of these subsequences following the given sequence (a prompt)
+		We simply sub the log probabilities of each {prompt sequence}+{label_sequence}
+	"""
 	def __init__(self, config: LlamaConfig, tokenizer: Tokenizer, label_names: list[str]):
 		super(LlamaZeroShotClassifier, self).__init__()
 		self.num_labels = config.num_labels
@@ -54,5 +61,22 @@ class LlamaEmbeddingClassifier(torch.nn.Module):
 		   logits (unnormalized probabilities) over all classes.
 		3) Take the log-softmax of the logits and return log-probabilities over all classes.
 		'''
-		# todo
-		raise NotImplementedError
+		"""
+		Again, input_ids is a tensor of shape (bs, batch_max_sequence_length), where each entry
+		is an integer token ID from the model's vocabulary.
+		"""
+		# logits is (bs, current_seq_len, vocab), unless in self.forward targets is None (which it usually is), then it's (bs, 1, vocab)
+		_, h = self.llama(input_ids) # h is a (bs, seq_len, hdim) tensor
+		
+		# take just the final token's hidden state; we just care about the last token
+		h_last_token = h[:, -1, :] # (bs, hdim)
+		
+		# Dropout
+		h_last_token_dropout = self.dropout(h_last_token) # apply dropout as instructed; (bs, hdim)
+
+		# Project to vocab dim
+		logits = self.classifier_head(h_last_token_dropout) # (bs, vocab) classifier head is just a linear layer from hdim to vocab
+		
+		# Get log probs and return
+		log_probs = F.log_softmax(logits, dim=-1) # (bs, vocab)
+		return log_probs
