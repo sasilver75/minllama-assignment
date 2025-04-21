@@ -276,8 +276,33 @@ class LlamaLayer(nn.Module):
         5) add a residual connection from the unnormalized self-attention output to the
            output of the feed-forward network
         '''
-        # todo
-        raise NotImplementedError
+        """
+        Okay, this is a transformer block!
+        In Llama 2, it's:
+        1) Prenorm (RMSNorm)
+        2) Attention
+        3) Add to residual stream
+        4) Prenorm (RMSNorm)
+        5) FFNN
+        6) Add to residual stream
+
+        This function takes a tensor x of shape (bs, batch_maxseqlen, hdim)
+        This will be referred to as (B,T,C)
+        """ 
+        h = x
+
+        # Prenormalization via RMSNorm
+        # Attention
+        # Add to Residual Stream
+        h += self.attention(self.attention_norm(x))
+
+        # Prenorm via RMSNorm
+        # FFNN
+        # Add to Residual Stream
+        h += self.feed_forward(self.ffn_norm(h))
+
+        # Return
+        return h
 
 class Llama(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -347,18 +372,43 @@ class Llama(LlamaPreTrainedModel):
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         Also note this is a super inefficient version of sampling with no key/value cache.
         """
+        """
+        Sam Notes:
+        - So idx is a sequence of token indices of shape (bs, seq_len)
+            For a single prompt, this would be initialized as (1,T), where T is our prompt length
+            The second dimension is the current length of the sequence, and grows by 1 every loop iteration. 
+            - NOTE: Both idx and idx_cond are tensors of _token IDs_, not continuous embeddings.
+        - Okay, the idX_cond thing is maintaining a SLIDING WINDOW of at most max_seq_len tokens.
+            e.g. if our self.params.max_seq_len is 50, then as we generate the (say) 52nd token,
+            then we'll keep only hte last 50 tokens as context (2:51, say.)
+        - Every time we loop, we:
+            - Take the lsat up-to-max-seq-len tokens from each batch row (bs, min(L, maxseqlen))
+                - Where L is the current length of the sequence
+            - Get the logits for position L [the next token, smapling a new token for each sequence (bs, 1)
+            - Concatenate, such that idx becomes (batch_size, L+1)
+        - Again, idx is (batch_size, current_length), whereas idx_cond is the CROPPEd version that we actually pass
+            to the model at each step. This is going to be (batch_size, max(current_length, max_seq_len))
+        """
+
         for _ in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.params.max_seq_len else idx[:, -self.params.max_seq_len:]
             # forward the model to get the logits for the index in the sequence
-            logits, _ = self(idx_cond)
-            logits = logits[:, -1, :] # crop to just the final time step
-            # todo
-            raise NotImplementedError
+            logits, _ = self(idx_cond) # We can use self here because we subclass nn.Module, and its __call__ is the thing to do.
+            # logits is (bs, current_seq_len, vocab), unless in self.forward targets is None (which it usually is), then it's (bs, 1, vocab)
+            logits = logits[:, -1, :] # crop to just the final time step; we only care about logits for the next token, here. 
+            # logits is now (bs, vocab); we've removed that "time"/"position" axis; its' just logits for the next token for each sequence in batch, now.
+
 
             if temperature == 0.0:
                 # select the single most likely index
-                idx_next = None
+                """
+                Temperature of 0 is basically just greedy decoding.
+                This just means that we have to... argmax over the logits (to get the vocab index with the highest logit)
+                """
+                # Note that we don't HAVE to softmax here, because argmax(softmax(vector)) and argmax(vector) will be the same thing, since softmax is monotonic.
+                idx_next = torch.argmax(logits, dim=1) # (B,V) -> (B,) vector of the max vocab index for each sequence in our batch!
+                idx_next = idx_next.unsqueeze() # We need a 2-dimensional (B,1) to append it to our idx, later.
             else:
                 '''
                 Perform temperature sampling:
@@ -369,9 +419,17 @@ class Llama(LlamaPreTrainedModel):
 
                 Note that we are not using top-k sampling/nucleus sampling in this procedure.
                 '''
-                idx_next = None
+                """
+                Note that we have to actually softmax here because we're going to be really sampling, not just argmaxing.
+                """
+                temp_scaled = logits/temperature # Just scale the logits by temperature (B,V)
+                probs = torch.softmax(temp_scaled, dim=1) # Softmax along the vocab dimension of our (B,V)
+                idx_next = torch.multinomial(probs, num_samples=1) # Sample from the token probability dist for each seq: (B,1)
+                # Above: Note that this indeed does return the INDEX that we'd want (rather than any of the token probs in our second dimension, here)
+            
+            # regardless of the temperature used... We take that vector of next indices for each sequence
             # append sampled index to the running sequence and continue
-            idx = torch.cat((idx, idx_next), dim=1)
+            idx = torch.cat((idx, idx_next), dim=1) # Plop the new column onto the right side of our idx matrix
 
 
         return idx
