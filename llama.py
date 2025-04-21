@@ -1,3 +1,18 @@
+"""
+File contains the following stuff:
+1. RMSNorm class
+    - RMS Normalization layer, a nn.Module
+2. Attention class
+    - Multi-head Grouped Multi-Query Attention (GQSA) layer, a nn.Module
+3. FeedForward class
+    - FeedForward layer, a nn.Module
+4. LlamaLayer class
+    - A Transformer block, a nn.Module; Uses the above modules.
+5. Llama class
+    - The overall model class. Uses the above modules.
+6. load_pretrained function
+    - Loads model weights
+"""
 from contextlib import nullcontext
 from typing import Optional, Tuple
 import math
@@ -30,7 +45,7 @@ class RMSNorm(torch.nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def _norm(self, x):
+    def _norm(self, x: torch.Tensor) -> torch.Tensor:
         """
         Compute the root mean square normalization. Use Equation 4 under
         Section 4 of https://arxiv.org/abs/1910.07467 as a reference. Add 
@@ -43,8 +58,14 @@ class RMSNorm(torch.nn.Module):
         Returns:
             torch.Tensor: The normalized tensor.
         """
-        # todo
-        raise NotImplementedError
+        # Given a [batch, seq_len, hdim] tensor
+        # First, take the mean along the embedding dimension [2], which gives us [batch, seq_len]
+        # But we want to do a division of our original tensor by this rms tensor later, so we can either
+        # unsqueeze manually to get [2,3,1] or we can do this keepdim=True
+        # We add the eps for magical...stability... or something.
+        rms = torch.sqrt(torch.mean((x**2), dim=2, keepdim=True) + self.eps)
+        # We just normalize our original tensor by the rms tensor; don't mess with scaling here
+        return x / rms
 
     def forward(self, x):
         """
@@ -57,7 +78,9 @@ class RMSNorm(torch.nn.Module):
             torch.Tensor: The output tensor after applying RMSNorm.
 
         """
+        # Normalize the tensor by the RMS (which is basically layer norm but without 0-centering iirc)
         output = self._norm(x.float()).type_as(x)
+        # Apply this g_i scaler, which lets us learn a per-channel rescaling (just as in LayerNorm... wait, huh?). 
         return output * self.weight
 
 class Attention(nn.Module):
@@ -296,7 +319,16 @@ class Llama(LlamaPreTrainedModel):
 
         return idx
 
-def load_pretrained(checkpoint):
+def load_pretrained(checkpoint: str) -> Llama:
+  """
+  Loads a pretrained model from a checkpoint file.
+
+  Args:
+    checkpoint (str): The path to the checkpoint file.
+
+  Returns:
+    Llama: The loaded model.
+  """
   device = 'cuda' if torch.cuda.is_available() else 'cpu' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
   #dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
   dtype = "float32"

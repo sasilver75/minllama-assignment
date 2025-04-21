@@ -179,6 +179,8 @@ class PretrainedConfig(object):
 
     return config_dict, kwargs
 
+# This holds the hyperparametrs for the model. I dn't think we should change the architectural ones,
+# since we want to 
 class LlamaConfig(PretrainedConfig):
   model_type = "llama"
   def __init__(
