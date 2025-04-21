@@ -116,8 +116,65 @@ class Attention(nn.Module):
         Make sure to use attention_dropout (self.attn_dropout) on the computed
         attention matrix before applying it to the value tensor.
         '''
-        # todo
-        raise NotImplementedError
+
+        """
+        Each of the incoming items are (batch_size, n_heads, max_batch_seqlen, head_dim)
+        This is soemtimes referred to as (B,H,T,D)
+
+        So we need to:
+        1. Compute the raw attention scores (Q K^T)
+        2. Compute the sqrt(d_k)
+        3. Apply the pre-softmax causal attention mask
+        4. Apply the softmax
+        """
+        # For each (batch sequence, head) pair, we want a tiny matmul between Q and K
+        # So that we end up with a T x T score per matrix head.
+        # But remember that we have to transpose our K matrix?
+        # In this batch form, this really means swapping the last axis so its shape becomes
+        # (B,H,D,T) instead of the usual (B,H,T,D)
+        
+        # First, we need to swap/transpose the lsat two dims of our key tensor.
+        # We could do key = key.transpose(-1, -2)... but I prefer the below syntax. 
+        key = key.swapaxes(2,3) # Change (B,H,T,D) -> (B,H,D,T)
+
+        # Next, we do QK^T
+        raw_scores = torch.matmul(query, key) # (B,H,T,D) @ (B,H,D,T) -> (B,H,T,T)
+
+        # Let's also get the divisor for our "scaled" attention
+        divisor = math.sqrt(self.head_dim) # We could alternatively select the appropriate D dim on our key tensor.
+        
+        # Now let's get our scaled raw scores by simply dividing our row scores by the divisor scalar.
+        scaled_rawscores = raw_scores / divisor # Still (B,H,T,T)
+
+        # Next we need to create and apply our attention mask.
+        # this is going to be a TxT matrix of 0s with the upper triangle above the main diagonal being -inf
+        T = query.shape[2]
+        mask = torch.full((T,T), float(-'inf')) # TxT matrix of all -infs
+        mask = torch.triu(mask, diagonal=1) # Diagonals and below become 0s
+        # But to add this (T,T) mask to our (B,H,T,T) raw scores, we need to unsqueeze it so that it can be broadcasted
+        mask = mask.unsqueeze(0).unsqueeze(0) # Now it's (1,1,T,T)
+
+        # Let's now mask our scaled raw scores
+        scaled_rawscores_masked = scaled_rawscores + mask # (B,H,T,T) still
+
+        # Finally we can apply the Softmax function to this
+        # We're applying the softmax over the "rows" of our scaled rawscores matrix
+        # Such that for each row (source), all of the columns (target) attention scores sum to 1.
+        attention_scores = torch.softmax(scaled_rawscores_masked, dim=-1) # (B,H,T,T) still
+
+        # Next, we need to apply the attention dropout as per the docstring
+        # This will zero out a random subset of our weights with prob=config.dropout during training
+        # note that this will do nothing at inference time :)
+        attention_scores_dropout = self.attn_dropout(attention_scores)
+
+        # Now we have our attention matrix. 
+        # We need to then multiple it by our value matrix! 
+        # Remember, softmax(QK^T/sqrt(d_k))V   <--- Don't forget this v part!
+        output = torch.matmul(attention_scores_dropout, value) # (B,H,T,T)@(B,H,T,D)->(BH,T,D)
+        # Above, PyTorch treated the leading (B,H) as batch dims, and did a matmul over the last two dims
+        # (T,T)@(T,D) -> (T,D), so our final one is (B,H,T,D), which is what we originally had too!
+
+        return output
 
     def forward(
         self,
@@ -151,7 +208,7 @@ class Attention(nn.Module):
         value = torch.repeat_interleave(value, dim=2, repeats=self.n_rep)
 
         # make heads into a batch dimension
-        query = query.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        query = query.transpose(1, 2)  #(bs, n_local _heads, seqlen, head_dim)
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
         output = self.compute_query_key_value_scores(query, key, value)

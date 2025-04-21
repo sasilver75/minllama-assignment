@@ -29,7 +29,7 @@ print(f"Example tensor shape: {example_tensor.shape}")
 
 # For each embedding vector in our batch, compute the mean of its squared elements.
 # This is along dimension 2, which is the embedding dimension.
-mean_squared_elements = torch.mean(example_tensor ** 2, dim=2)
+mean_squared_elements = torch.mean(example_tensor ** 2, dim=2, keepdim=True)
 
 print(f"Mean squared elements shape: {mean_squared_elements.shape}") # (2,3)
 
@@ -56,3 +56,9 @@ scaled_tensor = normalized_tensor * gamma
 
 print(f"Scaled tensor shape: {scaled_tensor.shape}")
 print(scaled_tensor)
+
+
+x = torch.tensor([1,2,3])
+print(x / 3)
+print(x.shape[-1])
+
