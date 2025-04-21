@@ -63,7 +63,7 @@ class RMSNorm(torch.nn.Module):
         # But we want to do a division of our original tensor by this rms tensor later, so we can either
         # unsqueeze manually to get [2,3,1] or we can do this keepdim=True
         # We add the eps for magical...stability... or something.
-        rms = torch.sqrt(torch.mean((x**2), dim=2, keepdim=True) + self.eps)
+        rms = torch.sqrt(torch.mean((x**2), dim=-1, keepdim=True) + self.eps)
         # We just normalize our original tensor by the rms tensor; don't mess with scaling here
         return x / rms
 
@@ -149,7 +149,11 @@ class Attention(nn.Module):
         # Next we need to create and apply our attention mask.
         # this is going to be a TxT matrix of 0s with the upper triangle above the main diagonal being -inf
         T = query.shape[2]
-        mask = torch.full((T,T), float(-'inf')) # TxT matrix of all -infs
+        mask = torch.full(
+            (T, T),
+            float('-inf'),
+            device=query.device
+        )
         mask = torch.triu(mask, diagonal=1) # Diagonals and below become 0s
         # But to add this (T,T) mask to our (B,H,T,T) raw scores, we need to unsqueeze it so that it can be broadcasted
         mask = mask.unsqueeze(0).unsqueeze(0) # Now it's (1,1,T,T)

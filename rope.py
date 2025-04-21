@@ -79,23 +79,20 @@ def apply_rotary_emb(
     positions = torch.arange(seqlen, device=device, dtype=query.dtype)  # (L,)
     freqs = torch.outer(positions, inv_freq)                           # (L, D/2)
 
-    # Next: Compute cos and sin of ω
-    # cos, sin shapes: (L, D/2)
+    # Next: Compute cos and sin of ω   (shapes: (L, D/2))
     cos = freqs.cos()
     sin = freqs.sin()
 
-    # Next: Broadcast cos/sin to match the query/key real‐imag shape
-    #   reshape_for_broadcast takes freqs: (L, D/2)
-    #   and x: (B, L, H, D) -> output shape (1, L, 1, D/2) which then
-    #   broadcasts to (B, L, H, D/2)
-    cos_b = reshape_for_broadcast(cos, query)  # → (B, L, H, D/2)
-    sin_b = reshape_for_broadcast(sin, query)  # → (B, L, H, D/2)
+    # Then split each head‐vector into D/2 “complex” pairs
+    #   query,key shape: (B, L, H, D)
+    #   → (B, L, H, D/2, 2) → unbind → real, imag each (B, L, H, D/2)
+    query_real, query_imag = query.float().reshape(*query.shape[:-1], -1, 2).unbind(-1)
+    key_real,   key_imag   = key.float().reshape(*key.shape[:-1],   -1, 2).unbind(-1)
 
-    # Then we can split heads into "real" and "imag" pairs
-    #   query, key: shape (B, L, H, D)
-    #   -> reshape to (B, L, H, D/2, 2) -> unbind -> real, imag each (B, L, H, D/2)
-    query_real, query_imag = query.float().reshape(query.shape[:-1] + (-1, 2)).unbind(-1)
-    key_real,   key_imag   = key.float().reshape(key.shape[:-1] + (-1, 2)).unbind(-1)
+    # Broadcasting cos/sin to match that (B, L, H, D/2) real/imag shape
+    #   reshape_for_broadcast will view (L, D/2) → (1, L, 1, D/2)
+    cos_b = reshape_for_broadcast(cos, query_real)  # → (B, L, H, D/2)
+    sin_b = reshape_for_broadcast(sin, query_real)  # → (B, L, H, D/2)
 
     # Perform ye ole rotation:
     #   (x_r + i x_i) * (cos + i sin)

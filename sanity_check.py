@@ -13,8 +13,13 @@ sent_ids = torch.tensor([[101, 7592, 2088, 102, 0, 0, 0, 0],
 
 # load our model
 llama = load_pretrained("stories42M.pt")
+llama.eval()
 with torch.no_grad():
     logits, hidden_states = llama(sent_ids)
+    print(f"LOGITS: {logits}")
+    print(f"SANITY DATA LOGITS: {sanity_data['logits']}")
+    print(f"HIDDEN STATES: {hidden_states}")
+    print(f"SANITY DATA HIDDEN STATES: {sanity_data['hidden_states']}")
     assert torch.allclose(logits, sanity_data["logits"], atol=1e-5, rtol=1e-3)
     assert torch.allclose(hidden_states, sanity_data["hidden_states"], atol=1e-5, rtol=1e-3)
     print("Your Llama implementation is correct!")
