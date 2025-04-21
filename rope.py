@@ -50,26 +50,66 @@ def apply_rotary_emb(
 
     _, seqlen, _, _ = query.shape
     device = query.device
-    # todo
-    #
-    # Please refer to slide 22 in https://phontron.com/class/anlp2024/assets/slides/anlp-05-transformers.pdf
-    # and Section 3 in https://arxiv.org/abs/2104.09864.
+    # -----------------------------------------------------------------------
+    """ sam yapping
+    Basically we're trying to inject positional information by rotating each PAIR of dimensions in our query/key
+    vectors by a determined amount. 
+    - We split each head-vector (q, k) into PAIRS of coordinates (D/2)
+    - We assign each pair a unique frequency that depends on its index (lower-index=slower, higher=faster)
+    - For each position p in the sequence, compute an angle for each pair
+    - Convert that angle to a real-valued cos and sin
+    - Multiply/rotate each complex coordinate by ^
+    - Re-interleave the rotated pairs back into our D-dim tensor
 
-    # reshape xq and xk to match the complex representation
+    The goal is that attention scores become a function of the relative distance/positoin between our two
+    rotated q and k vectors. It's nice and parameter free :)
+    """
+    
+    # First, we build Build inverse frequency vector
+    #   torch.arange(0, D, 2) → [0,2,4,…,D-2], length D/2
+    #   inv_freq[i] = 1 / θ^(2i/D)
+    # inv_freq: shape (D/2,)
+    inv_freq = 1.0 / (
+        theta ** (torch.arange(0, head_dim, 2, device=device, dtype=query.dtype) / head_dim)
+    )
+
+    # Next, we can compute angle matrix ω of shape (L, D/2)
+    #   positions p = [0,1,...,L-1] shape (L,)
+    #   freqs[p,i] = p * inv_freq[i]
+    positions = torch.arange(seqlen, device=device, dtype=query.dtype)  # (L,)
+    freqs = torch.outer(positions, inv_freq)                           # (L, D/2)
+
+    # Next: Compute cos and sin of ω
+    # cos, sin shapes: (L, D/2)
+    cos = freqs.cos()
+    sin = freqs.sin()
+
+    # Next: Broadcast cos/sin to match the query/key real‐imag shape
+    #   reshape_for_broadcast takes freqs: (L, D/2)
+    #   and x: (B, L, H, D) -> output shape (1, L, 1, D/2) which then
+    #   broadcasts to (B, L, H, D/2)
+    cos_b = reshape_for_broadcast(cos, query)  # → (B, L, H, D/2)
+    sin_b = reshape_for_broadcast(sin, query)  # → (B, L, H, D/2)
+
+    # Then we can split heads into "real" and "imag" pairs
+    #   query, key: shape (B, L, H, D)
+    #   -> reshape to (B, L, H, D/2, 2) -> unbind -> real, imag each (B, L, H, D/2)
     query_real, query_imag = query.float().reshape(query.shape[:-1] + (-1, 2)).unbind(-1)
-    key_real, key_imag = key.float().reshape(key.shape[:-1] + (-1, 2)).unbind(-1)
-    # This separates each query/key vector into its odd and even indices (assuming *one-indexing*).
-    # query_real contains q_1, q_3, q_5, ... and query_imag contains q_2, q_4, q_6, ...
+    key_real,   key_imag   = key.float().reshape(key.shape[:-1] + (-1, 2)).unbind(-1)
 
-    # First, compute the trigonometric values in the second and fourth columns in
-    # slide 22 (linked above).
+    # Perform ye ole rotation:
+    #   (x_r + i x_i) * (cos + i sin)
+    # -> real_out = x_r·cos - x_i·sin
+    #    imag_out = x_r·sin + x_i·cos
+    q_real_rot = query_real * cos_b - query_imag * sin_b   # (B, L, H, D/2)
+    q_imag_rot = query_real * sin_b + query_imag * cos_b   # (B, L, H, D/2)
+    k_real_rot = key_real * cos_b - key_imag * sin_b       # (B, L, H, D/2)
+    k_imag_rot = key_real * sin_b + key_imag * cos_b       # (B, L, H, D/2)
 
-    # Then, combine these trigonometric values with the tensors query_real, query_imag,
-    # key_real, and key_imag.
+    # Now re‐interleave real/imag into last dimension:
+    #   stack -> (B,L,H,D/2,2) -> flatten dim -2 -> (B,L,H, D)
+    query_out = torch.stack((q_real_rot, q_imag_rot), dim=-1).flatten(-2)
+    key_out   = torch.stack((k_real_rot, k_imag_rot), dim=-1).flatten(-2)
 
-    raise NotImplementedError
-
-    query_out = None
-    key_out = None
-    # Return the rotary position embeddings for the query and key tensors
-    return query_out, key_out
+    # And finally cast back to original dtype and return
+    return query_out.to(query.dtype), key_out.to(key.dtype)
